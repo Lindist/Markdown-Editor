@@ -19,7 +19,17 @@ Welcome to your **Tauri + React** Markdown Note-taking App!
 - **Live Preview:** Instant parsing with \`marked\`
 - **Safe & Secure:** Sanitized with \`DOMPurify\` to block malicious XSS
 - **Split Screen:** Draggable divider & collapsible panes
-- **OS Integration:** Open and Save local \`.md\` files directly!
+- **OS Integration:** Open and Save local \`.md\` files directly
+- **Synchronized Scrolling:** Scroll either side to scroll both proportionally
+- **Keyboard Shortcuts:** \`Ctrl+S\`, \`Ctrl+O\`, \`Ctrl+N\`
+
+---
+
+## ⌨️ Shortcuts Reference
+- \`Ctrl + S\` (or \`Cmd + S\`): **Save File**
+- \`Ctrl + Shift + S\`: **Save As**
+- \`Ctrl + O\`: **Open File**
+- \`Ctrl + N\`: **New Document**
 
 ---
 
@@ -34,7 +44,7 @@ console.log(greeting);
 - [x] Phase 1.5: Resizable & Collapsible Split Panes
 - [x] Phase 2: Core Frontend Logic (Live Preview)
 - [x] Phase 3: Operating System Integration (Open / Save)
-- [ ] Phase 4: Enhancements (Keyboard shortcuts & Synced scroll)
+- [x] Phase 4: Enhancements (Keyboard shortcuts & Synced scroll)
 
 ## 📊 Sample Table
 | Technology | Role |
@@ -53,11 +63,29 @@ export default function App() {
   const [isModified, setIsModified] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string>("Ready");
 
+  // Synchronized Scrolling state
+  const [isSyncScroll, setIsSyncScroll] = useState<boolean>(true);
+
   // Pane resizing & collapsing states
   const [splitRatio, setSplitRatio] = useState<number>(50); // percentage (0 - 100)
   const [collapsedState, setCollapsedState] = useState<"none" | "editor" | "preview">("none");
   const [isDragging, setIsDragging] = useState<boolean>(false);
+
+  // DOM References
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const editorRef = useRef<HTMLTextAreaElement | null>(null);
+  const previewRef = useRef<HTMLDivElement | null>(null);
+
+  // Active scroll source tracker ("editor" | "preview" | null)
+  const activeScrollerRef = useRef<"editor" | "preview" | null>(null);
+
+  // Refs for shortcuts to prevent stale closure
+  const markdownRef = useRef(markdown);
+  markdownRef.current = markdown;
+  const currentFilePathRef = useRef(currentFilePath);
+  currentFilePathRef.current = currentFilePath;
+  const isModifiedRef = useRef(isModified);
+  isModifiedRef.current = isModified;
 
   // Helper to extract filename from path
   const getFileName = (path: string | null) => {
@@ -74,7 +102,7 @@ export default function App() {
     setIsModified(true);
   };
 
-  // Phase 3: Open File Dialog & Read File
+  // Open File Dialog & Read File
   const handleOpenFile = async () => {
     if (!isTauri) {
       alert("Tauri API is only available inside the Tauri desktop app window.");
@@ -104,7 +132,7 @@ export default function App() {
     }
   };
 
-  // Phase 3: Save File (Save or Save As if new)
+  // Save File (Save or Save As if new)
   const handleSaveFile = async () => {
     if (!isTauri) {
       alert("Tauri API is only available inside the Tauri desktop app window.");
@@ -112,7 +140,7 @@ export default function App() {
     }
 
     try {
-      let targetPath = currentFilePath;
+      let targetPath = currentFilePathRef.current;
 
       if (!targetPath) {
         // If not saved before, open save dialog
@@ -128,7 +156,7 @@ export default function App() {
         targetPath = selected;
       }
 
-      await writeTextFile(targetPath, markdown);
+      await writeTextFile(targetPath, markdownRef.current);
       setCurrentFilePath(targetPath);
       setIsModified(false);
       setStatusMessage(`Saved: ${getFileName(targetPath)}`);
@@ -138,7 +166,7 @@ export default function App() {
     }
   };
 
-  // Phase 3: Save As File
+  // Save As File
   const handleSaveAsFile = async () => {
     if (!isTauri) {
       alert("Tauri API is only available inside the Tauri desktop app window.");
@@ -151,12 +179,12 @@ export default function App() {
           { name: "Markdown", extensions: ["md"] },
           { name: "All Files", extensions: ["*"] },
         ],
-        defaultPath: currentFilePath || "notes.md",
+        defaultPath: currentFilePathRef.current || "notes.md",
       });
 
       if (!selected) return;
 
-      await writeTextFile(selected, markdown);
+      await writeTextFile(selected, markdownRef.current);
       setCurrentFilePath(selected);
       setIsModified(false);
       setStatusMessage(`Saved As: ${getFileName(selected)}`);
@@ -168,7 +196,7 @@ export default function App() {
 
   // New Blank Document
   const handleNewFile = () => {
-    if (isModified && !confirm("You have unsaved changes. Create a new document?")) {
+    if (isModifiedRef.current && !confirm("You have unsaved changes. Create a new document?")) {
       return;
     }
     setMarkdown("# Untitled\n\n");
@@ -176,6 +204,69 @@ export default function App() {
     setIsModified(false);
     setStatusMessage("New document created.");
   };
+
+  // ========================================================
+  // Phase 4: Synchronized Scrolling Logic
+  // ========================================================
+  const handleEditorScroll = () => {
+    if (!isSyncScroll || activeScrollerRef.current !== "editor") return;
+    const editor = editorRef.current;
+    const preview = previewRef.current;
+    if (!editor || !preview) return;
+
+    const maxEditorScroll = editor.scrollHeight - editor.clientHeight;
+    if (maxEditorScroll <= 0) return;
+
+    const scrollPercentage = editor.scrollTop / maxEditorScroll;
+    const maxPreviewScroll = preview.scrollHeight - preview.clientHeight;
+    preview.scrollTop = scrollPercentage * maxPreviewScroll;
+  };
+
+  const handlePreviewScroll = () => {
+    if (!isSyncScroll || activeScrollerRef.current !== "preview") return;
+    const editor = editorRef.current;
+    const preview = previewRef.current;
+    if (!editor || !preview) return;
+
+    const maxPreviewScroll = preview.scrollHeight - preview.clientHeight;
+    if (maxPreviewScroll <= 0) return;
+
+    const scrollPercentage = preview.scrollTop / maxPreviewScroll;
+    const maxEditorScroll = editor.scrollHeight - editor.clientHeight;
+    editor.scrollTop = scrollPercentage * maxEditorScroll;
+  };
+
+  // ========================================================
+  // Phase 4: Global Keyboard Shortcuts (Ctrl+S, Ctrl+O, Ctrl+N)
+  // ========================================================
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
+      const modifier = isMac ? e.metaKey : e.ctrlKey;
+
+      if (!modifier) return;
+
+      const key = e.key.toLowerCase();
+
+      if (key === "s") {
+        e.preventDefault();
+        if (e.shiftKey) {
+          handleSaveAsFile();
+        } else {
+          handleSaveFile();
+        }
+      } else if (key === "o") {
+        e.preventDefault();
+        handleOpenFile();
+      } else if (key === "n") {
+        e.preventDefault();
+        handleNewFile();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   // Parse Markdown to Sanitized HTML in Real-Time
   const parsedHtml = useMemo(() => {
@@ -248,9 +339,9 @@ export default function App() {
         isDragging ? "select-none cursor-col-resize" : ""
       }`}
     >
-      {/* Top Toolbar: File Actions & Layout Controls */}
+      {/* Top Toolbar */}
       <header className="h-12 bg-slate-800 border-b border-slate-700 flex items-center px-4 justify-between text-xs text-slate-300 z-10 select-none">
-        {/* Left Section: File Operations (Phase 3) */}
+        {/* Left Section: File Operations */}
         <div className="flex items-center gap-2">
           {/* App Branding */}
           <span className="font-bold text-slate-100 mr-2 flex items-center gap-1.5 text-sm">
@@ -258,10 +349,10 @@ export default function App() {
             <span className="hidden sm:inline">MD Editor</span>
           </span>
 
-          {/* Action Buttons */}
+          {/* Action Buttons with Shortcut Tooltips */}
           <button
             onClick={handleNewFile}
-            title="Create New File"
+            title="Create New File (Ctrl + N)"
             className="flex items-center gap-1 px-2.5 py-1.5 rounded bg-slate-700/80 hover:bg-slate-700 text-slate-200 hover:text-white transition-colors"
           >
             <span>📄</span>
@@ -270,7 +361,7 @@ export default function App() {
 
           <button
             onClick={handleOpenFile}
-            title="Open File from System (OS Dialog)"
+            title="Open File (Ctrl + O)"
             className="flex items-center gap-1 px-2.5 py-1.5 rounded bg-slate-700/80 hover:bg-slate-700 text-slate-200 hover:text-white transition-colors"
           >
             <span>📂</span>
@@ -279,7 +370,7 @@ export default function App() {
 
           <button
             onClick={handleSaveFile}
-            title="Save File (OS Dialog if new)"
+            title="Save File (Ctrl + S)"
             className="flex items-center gap-1 px-2.5 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-medium shadow-sm transition-colors"
           >
             <span>💾</span>
@@ -288,14 +379,14 @@ export default function App() {
 
           <button
             onClick={handleSaveAsFile}
-            title="Save As..."
+            title="Save As (Ctrl + Shift + S)"
             className="hidden md:flex items-center gap-1 px-2.5 py-1.5 rounded bg-slate-700/80 hover:bg-slate-700 text-slate-200 hover:text-white transition-colors"
           >
             <span>Save As</span>
           </button>
 
           {/* Document Title Badge */}
-          <div className="ml-3 hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-900/70 border border-slate-700/60 text-slate-300 text-xs">
+          <div className="ml-2 hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-900/70 border border-slate-700/60 text-slate-300 text-xs">
             <span className="text-slate-400">File:</span>
             <span className="font-medium text-slate-200">{getFileName(currentFilePath)}</span>
             {isModified && (
@@ -306,8 +397,22 @@ export default function App() {
           </div>
         </div>
 
-        {/* Right Section: Status Indicator & View Mode Controls */}
+        {/* Right Section: Sync Scroll Toggle, Status & View Mode Controls */}
         <div className="flex items-center gap-3">
+          {/* Phase 4: Sync Scroll Toggle Button */}
+          <button
+            onClick={() => setIsSyncScroll(!isSyncScroll)}
+            title={isSyncScroll ? "Synchronized Scrolling: ON" : "Synchronized Scrolling: OFF"}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs font-medium transition-all ${
+              isSyncScroll
+                ? "bg-indigo-950/60 border-indigo-700/70 text-indigo-300"
+                : "bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-300"
+            }`}
+          >
+            <span>{isSyncScroll ? "🔗" : "⛓️‍💥"}</span>
+            <span className="hidden md:inline">Sync Scroll</span>
+          </button>
+
           {/* Status Message */}
           <span className="text-[11px] text-slate-400 italic hidden lg:inline">
             {statusMessage}
@@ -379,8 +484,16 @@ export default function App() {
             </button>
           </div>
           <textarea
+            ref={editorRef}
             value={markdown}
             onChange={(e) => handleMarkdownChange(e.target.value)}
+            onScroll={handleEditorScroll}
+            onMouseEnter={() => {
+              activeScrollerRef.current = "editor";
+            }}
+            onMouseLeave={() => {
+              if (activeScrollerRef.current === "editor") activeScrollerRef.current = null;
+            }}
             placeholder="Type your markdown here..."
             className="w-full flex-1 p-5 bg-transparent resize-none outline-none font-mono text-sm leading-relaxed text-slate-200 placeholder-slate-500 overflow-y-auto"
             spellCheck={false}
@@ -466,8 +579,16 @@ export default function App() {
               Collapse ▶
             </button>
           </div>
-          {/* Live Sanitized HTML Preview */}
+          {/* Live Sanitized HTML Preview with Synchronized Scrolling */}
           <div
+            ref={previewRef}
+            onScroll={handlePreviewScroll}
+            onMouseEnter={() => {
+              activeScrollerRef.current = "preview";
+            }}
+            onMouseLeave={() => {
+              if (activeScrollerRef.current === "preview") activeScrollerRef.current = null;
+            }}
             className="markdown-preview flex-1 p-6 overflow-y-auto"
             dangerouslySetInnerHTML={{ __html: parsedHtml }}
           />
