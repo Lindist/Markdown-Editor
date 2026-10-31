@@ -1,15 +1,68 @@
-import { useState, useRef, useEffect, MouseEvent as ReactMouseEvent } from "react";
+import { useState, useRef, useEffect, useMemo, MouseEvent as ReactMouseEvent } from "react";
+import { marked } from "marked";
+import DOMPurify from "dompurify";
+
+// Configure marked options
+marked.setOptions({
+  breaks: true, // Convert \n to <br>
+  gfm: true,    // GitHub Flavored Markdown (tables, task lists, etc.)
+});
+
+const INITIAL_MARKDOWN = `# 📝 Markdown Live Preview
+
+Welcome to your **Tauri + React** Markdown Note-taking App!
+
+## 🚀 Features
+- **Fast & Responsive:** Powered by Vite, React, and Tauri (Rust)
+- **Live Preview:** Instant parsing with \`marked\`
+- **Safe & Secure:** Sanitized with \`DOMPurify\` to block malicious XSS
+- **Split Screen:** Draggable divider & collapsible panes
+
+---
+
+## 💻 Code Example
+\`\`\`typescript
+const greeting = "Hello, Tauri Developer!";
+console.log(greeting);
+\`\`\`
+
+## 📋 Task List
+- [x] Phase 1: Project Initialization & Basic Layout
+- [x] Phase 1.5: Resizable & Collapsible Split Panes
+- [x] Phase 2: Core Frontend Logic (Live Preview)
+- [ ] Phase 3: Operating System Integration (Open / Save)
+- [ ] Phase 4: Enhancements (Keyboard shortcuts & Synced scroll)
+
+## 📊 Sample Table
+| Technology | Role |
+| :--- | :--- |
+| **Tauri v2** | Desktop Runtime & OS Integration |
+| **Rust** | High-performance Native Backend |
+| **React 19** | Dynamic User Interface |
+| **TailwindCSS** | Clean Modern Styling |
+
+> "Simplicity is prerequisite for reliability." — Edsger W. Dijkstra
+`;
 
 export default function App() {
-  const [markdown, setMarkdown] = useState<string>(
-    "# Welcome to Markdown Notes\n\nStart typing on the left to see live preview on the right!\n\n- **Drag** the center divider to resize.\n- **Double-click** the divider to reset to 50/50.\n- Use the toolbar buttons to **collapse / expand** views."
-  );
+  const [markdown, setMarkdown] = useState<string>(INITIAL_MARKDOWN);
 
   // Pane resizing & collapsing states
   const [splitRatio, setSplitRatio] = useState<number>(50); // percentage (0 - 100)
   const [collapsedState, setCollapsedState] = useState<"none" | "editor" | "preview">("none");
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
+
+  // Parse Markdown to Sanitized HTML in Real-Time
+  const parsedHtml = useMemo(() => {
+    try {
+      const rawHtml = marked.parse(markdown) as string;
+      return DOMPurify.sanitize(rawHtml);
+    } catch (err) {
+      console.error("Markdown parsing error:", err);
+      return `<p class="text-rose-400">Error rendering markdown.</p>`;
+    }
+  }, [markdown]);
 
   // Handle Dragging
   const handleMouseDown = (e: ReactMouseEvent) => {
@@ -75,8 +128,8 @@ export default function App() {
       <header className="h-11 bg-slate-800 border-b border-slate-700 flex items-center px-4 justify-between text-xs text-slate-400 z-10">
         <div className="flex items-center gap-3">
           <span className="font-semibold text-slate-200 text-sm">Markdown Notes</span>
-          <span className="px-2 py-0.5 rounded bg-slate-700/60 text-[10px] text-slate-300">
-            Phase 1: Resizable Split Pane
+          <span className="px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 text-[10px] font-medium">
+            Phase 2: Live Preview
           </span>
         </div>
 
@@ -139,7 +192,7 @@ export default function App() {
             <button
               onClick={() => toggleCollapse("editor")}
               title="Collapse Editor"
-              className="hover:text-slate-200 p-0.5 rounded hover:bg-slate-700"
+              className="hover:text-slate-200 p-0.5 rounded hover:bg-slate-700 transition-colors"
             >
               ◀ Collapse
             </button>
@@ -148,7 +201,7 @@ export default function App() {
             value={markdown}
             onChange={(e) => setMarkdown(e.target.value)}
             placeholder="Type your markdown here..."
-            className="w-full flex-1 p-4 bg-transparent resize-none outline-none font-mono text-sm leading-relaxed text-slate-200 placeholder-slate-500 overflow-y-auto"
+            className="w-full flex-1 p-5 bg-transparent resize-none outline-none font-mono text-sm leading-relaxed text-slate-200 placeholder-slate-500 overflow-y-auto"
             spellCheck={false}
           />
         </section>
@@ -227,16 +280,16 @@ export default function App() {
             <button
               onClick={() => toggleCollapse("preview")}
               title="Collapse Preview"
-              className="hover:text-slate-200 p-0.5 rounded hover:bg-slate-700"
+              className="hover:text-slate-200 p-0.5 rounded hover:bg-slate-700 transition-colors"
             >
               Collapse ▶
             </button>
           </div>
-          <div className="flex-1 p-4 overflow-y-auto text-slate-200">
-            <pre className="font-mono text-sm whitespace-pre-wrap text-slate-300">
-              {markdown}
-            </pre>
-          </div>
+          {/* Live Sanitized HTML Preview */}
+          <div
+            className="markdown-preview flex-1 p-6 overflow-y-auto"
+            dangerouslySetInnerHTML={{ __html: parsedHtml }}
+          />
         </section>
       </main>
     </div>
