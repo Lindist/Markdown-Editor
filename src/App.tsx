@@ -3,6 +3,7 @@ import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import appLogo from "./assets/logo.png";
 
 // Configure marked options
 marked.setOptions({
@@ -344,8 +345,8 @@ export default function App() {
         {/* Left Section: File Operations */}
         <div className="flex items-center gap-2">
           {/* App Branding */}
-          <span className="font-bold text-slate-100 mr-2 flex items-center gap-1.5 text-sm">
-            <span>📝</span>
+          <span className="font-bold text-slate-100 mr-2 flex items-center gap-2 text-sm">
+            <img src={appLogo} alt="Logo" className="w-5 h-5 rounded-full object-cover shadow-sm" />
             <span className="hidden sm:inline">MD Editor</span>
           </span>
 
